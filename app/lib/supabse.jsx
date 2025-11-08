@@ -1,4 +1,3 @@
-// lib/supabase.js
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 
@@ -11,5 +10,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
+    detectSessionInUrl: false, // ✅ prevents "window is not defined" in React Native
   },
 });
+
