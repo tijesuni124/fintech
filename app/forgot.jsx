@@ -1,15 +1,24 @@
 import { Link } from "expo-router";
 import { useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { supabase } from "./lib/supabse";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "./lib/firebase"; // your Firebase init
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
 
   const handleReset = async () => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-    if (error) Alert.alert("Error", error.message);
-    else Alert.alert("Check your email", "Password reset link sent.");
+    if (!email) {
+      Alert.alert("Error", "Please enter your email");
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert("Check your email", "Password reset link sent.");
+    } catch (error) {
+      Alert.alert("Error", error.message);
+    }
   };
 
   return (
@@ -55,3 +64,4 @@ export default function ForgotPassword() {
     </View>
   );
 }
+
