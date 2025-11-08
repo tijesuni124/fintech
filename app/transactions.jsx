@@ -7,57 +7,52 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { supabase } from "./lib/supabse";
+import { auth, db } from "./lib/firebase"; // your Firebase init
+import { collection, addDoc, query, orderBy, onSnapshot } from "firebase/firestore";
 
 export default function Transactions() {
   const [amount, setAmount] = useState("");
   const [type, setType] = useState("deposit");
   const [history, setHistory] = useState([]);
 
-  const loadHistory = async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData?.session?.user?.id;
-    if (!userId) return;
-    const { data } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-    setHistory(data || []);
-  };
+  const user = auth.currentUser;
+  if (!user) Alert.alert("Error", "User not logged in");
 
   useEffect(() => {
-    loadHistory();
-    const channel = supabase
-      .channel("public:transactions")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "transactions" },
-        (payload) => {
-          loadHistory();
-        }
-      )
-      .subscribe();
+    if (!user) return;
 
-    return () => {
-      supabase.removeChannel && supabase.removeChannel(channel);
-    };
-  }, []);
+    const q = query(
+      collection(db, "transactions"),
+      orderBy("createdAt", "desc")
+    );
+
+    // realtime listener
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((t) => t.userId === user.uid); // only current user
+      setHistory(data);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const handleTrans = async () => {
-    if (!amount || isNaN(Number(amount)))
-      return Alert.alert("Enter valid amount");
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData?.session?.user?.id;
-    const { error } = await supabase.from("transactions").insert({
-      user_id: userId,
-      type,
-      amount: Number(amount),
-      description: "",
-    });
-    if (error) return Alert.alert("Error", error.message);
-    setAmount("");
-    loadHistory();
+    if (!amount || isNaN(Number(amount))) return Alert.alert("Enter valid amount");
+    if (!user) return;
+
+    try {
+      await addDoc(collection(db, "transactions"), {
+        userId: user.uid,
+        type,
+        amount: Number(amount),
+        description: "",
+        createdAt: new Date(),
+      });
+      setAmount("");
+    } catch (error) {
+      Alert.alert("Error", error.message);
+    }
   };
 
   return (
@@ -79,6 +74,7 @@ export default function Transactions() {
             marginBottom: 8,
           }}
         />
+
         <View style={{ flexDirection: "row", gap: 8 }}>
           <TouchableOpacity
             onPress={() => setType("deposit")}
@@ -94,6 +90,7 @@ export default function Transactions() {
               Deposit
             </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => setType("withdraw")}
             style={{
@@ -109,6 +106,7 @@ export default function Transactions() {
             </Text>
           </TouchableOpacity>
         </View>
+
         <TouchableOpacity
           onPress={handleTrans}
           style={{
@@ -126,9 +124,10 @@ export default function Transactions() {
       <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 8 }}>
         History
       </Text>
+
       <FlatList
         data={history}
-        keyExtractor={(i) => i.id?.toString()}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View
             style={{
@@ -143,7 +142,9 @@ export default function Transactions() {
             <View>
               <Text style={{ fontWeight: "700" }}>{item.type}</Text>
               <Text style={{ color: "#666", fontSize: 12 }}>
-                {new Date(item.created_at).toLocaleString()}
+                {item.createdAt.toDate
+                  ? item.createdAt.toDate().toLocaleString()
+                  : new Date(item.createdAt).toLocaleString()}
               </Text>
             </View>
             <Text
@@ -160,3 +161,4 @@ export default function Transactions() {
     </View>
   );
 }
+
