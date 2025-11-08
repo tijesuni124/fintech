@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { Dimensions, ScrollView, Text, View } from "react-native";
 import { LineChart } from "react-native-chart-kit";
-import { supabase } from "./lib/supabse";
+import { auth, db } from "./lib/firebase"; // your Firebase init
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  onSnapshot,
+} from "firebase/firestore";
 
 export default function Home() {
   const [summary, setSummary] = useState({
@@ -11,32 +20,24 @@ export default function Home() {
   });
   const [chartData, setChartData] = useState([0, 0, 0, 0, 0, 0, 0]);
 
-  // ✅ Safe fallback for screen width (works on web + mobile)
-  const getScreenWidth = () => {
-    try {
-      const { width } = Dimensions.get("window");
-      return width || 360;
-    } catch (e) {
-      return 360; // fallback if Dimensions fails
-    }
-  };
-
-  const screenWidth = getScreenWidth();
+  const screenWidth = Dimensions.get("window").width || 360;
 
   useEffect(() => {
     let mounted = true;
 
     const load = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData?.session?.user?.id;
-      if (!userId) return;
+      const user = auth.currentUser;
+      if (!user) return;
 
-      const { data: tx } = await supabase
-        .from("transactions")
-        .select("type, amount, created_at")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: true })
-        .limit(100);
+      const q = query(
+        collection(db, "transactions"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "asc"),
+        limit(100)
+      );
+
+      const snapshot = await getDocs(q);
+      const tx = snapshot.docs.map(doc => doc.data());
 
       if (!tx) return;
 
@@ -54,34 +55,35 @@ export default function Home() {
       balance = deposits - withdraws;
 
       if (mounted) {
-        setSummary({
-          balance,
-          totalDeposits: deposits,
-          totalWithdraws: withdraws,
-        });
-        const filled = Array(7 - points.length)
-          .fill(0)
-          .concat(points);
+        setSummary({ balance, totalDeposits: deposits, totalWithdraws: withdraws });
+        const filled = Array(7 - points.length).fill(0).concat(points);
         setChartData(filled);
       }
     };
 
     load();
 
-    const channel = supabase
-      .channel("public:transactions")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "transactions" },
-        () => {
-          load();
-        }
-      )
-      .subscribe();
+    // ✅ Realtime updates with Firestore
+    const user = auth.currentUser;
+    if (user) {
+      const q = query(
+        collection(db, "transactions"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "asc")
+      );
+
+      const unsubscribe = onSnapshot(q, () => {
+        load();
+      });
+
+      return () => {
+        mounted = false;
+        unsubscribe();
+      };
+    }
 
     return () => {
       mounted = false;
-      if (supabase.removeChannel) supabase.removeChannel(channel);
     };
   }, []);
 
@@ -130,3 +132,4 @@ export default function Home() {
     </ScrollView>
   );
 }
+
