@@ -1,7 +1,9 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { supabase } from "./lib/supabse";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "./lib/firebase"; // your Firebase init
+import { doc, setDoc } from "firebase/firestore";
 
 export default function Signup() {
   const router = useRouter();
@@ -10,12 +12,29 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
+    if (!email || !password) {
+      return Alert.alert("Error", "Please enter email and password");
+    }
+
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
-    if (error) return Alert.alert("Signup failed", error.message);
-    Alert.alert("Success", "Check your email to confirm account");
-    router.replace("/login");
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Optional: create a Firestore doc for this user
+      await setDoc(doc(db, "users", user.uid), {
+        full_name: "",
+        email: user.email,
+        createdAt: new Date(),
+      });
+
+      Alert.alert("Success", "Account created successfully");
+      router.replace("/login");
+    } catch (error) {
+      Alert.alert("Signup failed", error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -23,6 +42,7 @@ export default function Signup() {
       <Text style={{ fontSize: 24, fontWeight: "700", marginBottom: 20 }}>
         Sign Up
       </Text>
+
       <TextInput
         placeholder="Email"
         value={email}
@@ -36,6 +56,7 @@ export default function Signup() {
           marginBottom: 12,
         }}
       />
+
       <TextInput
         placeholder="Password"
         value={password}
@@ -48,6 +69,7 @@ export default function Signup() {
           marginBottom: 12,
         }}
       />
+
       <TouchableOpacity
         onPress={handleSignup}
         style={{
@@ -64,3 +86,4 @@ export default function Signup() {
     </View>
   );
 }
+
