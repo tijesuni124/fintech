@@ -11,15 +11,26 @@ export default function Home() {
   });
   const [chartData, setChartData] = useState([0, 0, 0, 0, 0, 0, 0]);
 
+  // ✅ Safe fallback for screen width (works on web + mobile)
+  const getScreenWidth = () => {
+    try {
+      const { width } = Dimensions.get("window");
+      return width || 360;
+    } catch (e) {
+      return 360; // fallback if Dimensions fails
+    }
+  };
+
+  const screenWidth = getScreenWidth();
+
   useEffect(() => {
     let mounted = true;
 
     const load = async () => {
-      const user = supabase.auth.getUser(); // v2 returns promise
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData?.session?.user?.id;
       if (!userId) return;
-      // fetch transaction aggregates for user (simple)
+
       const { data: tx } = await supabase
         .from("transactions")
         .select("type, amount, created_at")
@@ -40,14 +51,14 @@ export default function Home() {
         if (t.type === "deposit") deposits += Number(t.amount);
         else withdraws += Number(t.amount);
       });
-      balance = deposits - withdraws; // simplistic (replace by user metadata)
+      balance = deposits - withdraws;
+
       if (mounted) {
         setSummary({
           balance,
           totalDeposits: deposits,
           totalWithdraws: withdraws,
         });
-        // fill to 7 points
         const filled = Array(7 - points.length)
           .fill(0)
           .concat(points);
@@ -57,13 +68,12 @@ export default function Home() {
 
     load();
 
-    // subscribe to realtime changes (best-effort)
     const channel = supabase
       .channel("public:transactions")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "transactions" },
-        (payload) => {
+        () => {
           load();
         }
       )
@@ -71,7 +81,7 @@ export default function Home() {
 
     return () => {
       mounted = false;
-      supabase.removeChannel && supabase.removeChannel(channel);
+      if (supabase.removeChannel) supabase.removeChannel(channel);
     };
   }, []);
 
@@ -104,7 +114,7 @@ export default function Home() {
           labels: ["-6", "-5", "-4", "-3", "-2", "-1", "now"],
           datasets: [{ data: chartData }],
         }}
-        width={Dimensions.get("window").width - 32}
+        width={screenWidth - 32}
         height={220}
         yAxisLabel="$"
         chartConfig={{
