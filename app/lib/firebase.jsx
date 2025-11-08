@@ -1,91 +1,18 @@
-// firebase.js
+// lib/firebase.js
 import { initializeApp } from "firebase/app";
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  sendEmailVerification,
-  onAuthStateChanged,
-  signOut,
-} from "firebase/auth";
-import {
-  getFirestore,
-  doc,
-  setDoc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
-// ✅ Your Firebase config (from console)
 const firebaseConfig = {
-  apiKey: "YOUR_FIREBASE_API_KEY",
-  authDomain: "YOUR_FIREBASE_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_FIREBASE_PROJECT_ID",
-  storageBucket: "YOUR_FIREBASE_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyDinDD-cDv4YzHWyUrV1e6uLmLvQzAMS1Y",
+  authDomain: "fintech-decf7.firebaseapp.com",
+  projectId: "fintech-decf7",
+  storageBucket: "fintech-decf7.firebasestorage.app",
+  messagingSenderId: "279204184447",
+  appId: "1:279204184447:android:55f2ba1fcfe8989a649a4a",
 };
 
-// ✅ Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
-// ✅ Register new user
-export const registerUser = async (email, password, phone) => {
-  try {
-    const userCredential = await createUserWithEmailAndPassword(
-      auth,
-      email,
-      password
-    );
-    const user = userCredential.user;
-
-    // Send email verification to Gmail
-    await sendEmailVerification(user);
-
-    // Store phone number & info in Firestore
-    await setDoc(doc(db, "users", user.uid), {
-      email,
-      phone,
-      createdAt: serverTimestamp(),
-    });
-
-    return { success: true, message: "Signup successful! Check your Gmail for verification link." };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
-};
-
-// ✅ Login user
-export const loginUser = async (email, password) => {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    if (!user.emailVerified) {
-      return { success: false, message: "Please verify your email before logging in." };
-    }
-
-    await updateDoc(doc(db, "users", user.uid), {
-      lastLogin: serverTimestamp(),
-    });
-
-    return { success: true, user };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
-};
-
-// ✅ Logout user
-export const logoutUser = async () => {
-  await signOut(auth);
-};
-
-// ✅ Track login state (auto-login)
-export const onAuthChange = (callback) => {
-  return onAuthStateChanged(auth, callback);
-};
-
-// Export initialized Firebase modules
-export { auth, db };
