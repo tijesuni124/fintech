@@ -7,43 +7,66 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { supabase } from "./lib/supabse";
+import { auth, db } from "./lib/firebase"; // your Firebase init
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  query,
+  orderBy,
+  onSnapshot,
+  where,
+} from "firebase/firestore";
 
 export default function Watchlist() {
   const [symbol, setSymbol] = useState("");
   const [list, setList] = useState([]);
 
-  const loadList = async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData?.session?.user?.id;
-    const { data } = await supabase
-      .from("watchlist")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-    setList(data || []);
-  };
+  const user = auth.currentUser;
+  if (!user) Alert.alert("Error", "User not logged in");
 
   useEffect(() => {
-    loadList();
-  }, []);
+    if (!user) return;
+
+    const q = query(
+      collection(db, "watchlist"),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setList(data);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const addSymbol = async () => {
-    if (!symbol) return;
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData?.session?.user?.id;
-    const { error } = await supabase
-      .from("watchlist")
-      .insert({ user_id: userId, symbol: symbol.toUpperCase() });
-    if (error) return Alert.alert("Error", error.message);
-    setSymbol("");
-    loadList();
+    if (!symbol || !user) return;
+
+    try {
+      await addDoc(collection(db, "watchlist"), {
+        userId: user.uid,
+        symbol: symbol.toUpperCase(),
+        createdAt: new Date(),
+      });
+      setSymbol("");
+    } catch (error) {
+      Alert.alert("Error", error.message);
+    }
   };
 
   const removeSymbol = async (id) => {
-    const { error } = await supabase.from("watchlist").delete().eq("id", id);
-    if (error) return Alert.alert("Error", error.message);
-    loadList();
+    try {
+      await deleteDoc(doc(db, "watchlist", id));
+    } catch (error) {
+      Alert.alert("Error", error.message);
+    }
   };
 
   return (
@@ -68,7 +91,7 @@ export default function Watchlist() {
 
       <FlatList
         data={list}
-        keyExtractor={(i) => i.id.toString()}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View
             style={{
@@ -93,3 +116,4 @@ export default function Watchlist() {
     </View>
   );
 }
+
