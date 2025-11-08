@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { supabase } from "./lib/supabse";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "./lib/firebase"; // your Firebase init
 
 export default function Login() {
   const router = useRouter();
@@ -10,14 +11,20 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    if (!email || !password) {
+      return Alert.alert("Error", "Please enter email and password");
+    }
+
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setLoading(false);
-    if (error) return Alert.alert("Login failed", error.message);
-    router.replace("/home");
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log("Logged in:", userCredential.user);
+      router.replace("/home"); // navigate to dashboard
+    } catch (error) {
+      Alert.alert("Login failed", error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -25,6 +32,7 @@ export default function Login() {
       <Text style={{ fontSize: 24, fontWeight: "700", marginBottom: 20 }}>
         Login
       </Text>
+
       <TextInput
         placeholder="Email"
         value={email}
@@ -38,6 +46,7 @@ export default function Login() {
           marginBottom: 12,
         }}
       />
+
       <TextInput
         placeholder="Password"
         value={password}
@@ -50,6 +59,7 @@ export default function Login() {
           marginBottom: 12,
         }}
       />
+
       <TouchableOpacity
         onPress={handleLogin}
         style={{
@@ -63,12 +73,14 @@ export default function Login() {
           {loading ? "Signing in..." : "Sign in"}
         </Text>
       </TouchableOpacity>
+
       <TouchableOpacity
         onPress={() => router.push("/signup")}
         style={{ marginTop: 12 }}
       >
         <Text style={{ color: "#0a84ff" }}>Create account</Text>
       </TouchableOpacity>
+
       <TouchableOpacity
         onPress={() => router.push("/forgot")}
         style={{ marginTop: 8 }}
@@ -78,3 +90,4 @@ export default function Login() {
     </View>
   );
 }
+
